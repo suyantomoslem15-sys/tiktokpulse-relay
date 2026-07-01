@@ -37,7 +37,18 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ success: false, error: 'METHOD_NOT_ALLOWED' }); return; }
   try {
     const body = await readJson(req);
-    const items = Array.isArray(body) ? body : (body && body.items && Array.isArray(body.items) ? body.items : [body]);
+    let items = [];
+    if (Array.isArray(body)) {
+      items = body;
+    } else if (body && Array.isArray(body.items)) {
+      items = body.items;
+    } else if (body && Array.isArray(body.products)) {
+      items = body.products;
+    } else if (body && body.product && typeof body.product === 'object') {
+      items = [body.product];
+    } else if (body && typeof body === 'object') {
+      items = [body];
+    }
     const rows = items.map(filterRow).filter(r => r.product_id);
     if (rows.length === 0) { res.status(400).json({ success: false, error: 'EMPTY' }); return; }
     const { data, error } = await supabase.from('shop_products').upsert(rows, { onConflict: 'product_id' }).select('product_id');
