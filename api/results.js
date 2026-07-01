@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { db: { schema: process.env.SUPABASE_SCHEMA || 'public' } }
+);
+const TABLE = process.env.SUPABASE_TABLE || 'shop_products';
 
 function cors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,7 +23,7 @@ export default async function handler(req, res) {
     let lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 20));
     let off = Math.max(0, parseInt(offset, 10) || 0);
 
-    let q = supabase.from('shop_products').select('*', { count: 'exact' });
+    let q = supabase.from(TABLE).select('*', { count: 'exact' });
 
     if (ids) {
       const arr = String(ids).split(',').map(s => s.trim()).filter(Boolean);

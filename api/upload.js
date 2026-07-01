@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { db: { schema: process.env.SUPABASE_SCHEMA || 'public' } }
+);
+const TABLE = process.env.SUPABASE_TABLE || 'shop_products';
 
 function cors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -51,7 +56,7 @@ export default async function handler(req, res) {
     }
     const rows = items.map(filterRow).filter(r => r.product_id);
     if (rows.length === 0) { res.status(400).json({ success: false, error: 'EMPTY' }); return; }
-    const { data, error } = await supabase.from('shop_products').upsert(rows, { onConflict: 'product_id' }).select('product_id');
+    const { data, error } = await supabase.from(TABLE).upsert(rows, { onConflict: 'product_id' }).select('product_id');
     if (error) { res.status(500).json({ success: false, error: error.message }); return; }
     res.status(200).json({ success: true, count: data ? data.length : 0 });
   } catch (e) {
