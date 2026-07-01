@@ -34,6 +34,7 @@ function filterRow(obj) {
   }
   if (out.product_id == null && obj.id) out.product_id = String(obj.id);
   if (!out.last_updated_at) out.last_updated_at = new Date().toISOString();
+  if (!out.scraped_at) out.scraped_at = new Date().toISOString();
   return out;
 }
 
