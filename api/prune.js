@@ -6,6 +6,8 @@ const supabase = createClient(
   { db: { schema: process.env.SUPABASE_SCHEMA || 'public' } }
 );
 const TABLE = process.env.SUPABASE_TABLE || 'shop_products';
+const TABLE_SNAPSHOTS = process.env.SUPABASE_SNAPSHOTS_TABLE || 'product_snapshots';
+const TABLE_LOGS = process.env.SUPABASE_LOGS_TABLE || 'scraping_logs';
 
 function cors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -34,15 +36,39 @@ export default async function handler(req, res) {
     const ids = (preview.data || []).map(r => r.product_id).filter(Boolean);
     if (ids.length === 0) { res.status(200).json({ success: true, deleted: 0, days, cutoff }); return; }
 
-    // 2) Delete in chunks to avoid payload limits
-    let deleted = 0; const CHUNK = 500;
+    // 2) Delete child rows first to satisfy FK constraints
+    const CHUNK = 500;
+    let deletedSnapshots = 0;
+    let deletedLogs = 0;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      // product_snapshots: tolerate missing table/column
+      try {
+        const delS = await supabase.from(TABLE_SNAPSHOTS).delete().in('product_id', chunk);
+        if (!delS.error) deletedSnapshots += chunk.length;
+        else if (delS.error && !(delS.error.code === '42P01' || delS.error.code === '42703')) {
+          res.status(500).json({ success: false, error: delS.error.message, where: TABLE_SNAPSHOTS }); return;
+        }
+      } catch (e) {}
+      // scraping_logs: tolerate missing table/column
+      try {
+        const delL = await supabase.from(TABLE_LOGS).delete().in('product_id', chunk);
+        if (!delL.error) deletedLogs += chunk.length;
+        else if (delL.error && !(delL.error.code === '42P01' || delL.error.code === '42703')) {
+          res.status(500).json({ success: false, error: delL.error.message, where: TABLE_LOGS }); return;
+        }
+      } catch (e) {}
+    }
+
+    // 3) Delete from products
+    let deletedProducts = 0;
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
       const del = await supabase.from(TABLE).delete().in('product_id', chunk);
-      if (del.error) { res.status(500).json({ success: false, error: del.error.message, partial_deleted: deleted }); return; }
-      deleted += chunk.length;
+      if (del.error) { res.status(500).json({ success: false, error: del.error.message, partial_deleted: deletedProducts, where: TABLE }); return; }
+      deletedProducts += chunk.length;
     }
-    res.status(200).json({ success: true, deleted, days, cutoff });
+    res.status(200).json({ success: true, deleted_products: deletedProducts, deleted_snapshots: deletedSnapshots, deleted_logs: deletedLogs, days, cutoff });
   } catch (e) {
     res.status(500).json({ success: false, error: String(e) });
   }
